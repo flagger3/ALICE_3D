@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ALICE · un tributo procedural en Three.js</title>
+  <meta name="description" content="Retrato 3D de Alice (Alice: Madness Returns) construido por completo con Three.js: geometría, materiales, pelo y postprocesado procedurales." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="stage" aria-label="Escena 3D interactiva de Alice">
+    <canvas id="scene"></canvas>
+  </main>
+
+  <header class="brand">
+    <span class="brand__rule" aria-hidden="true"></span>
+    <h1>ALICE</h1>
+    <p>Un tributo procedural a <em>Alice: Madness Returns</em></p>
+  </header>
+
+  <aside class="credit" aria-hidden="true">
+    Fan art en tiempo real · geometría y materiales generados en el navegador
+  </aside>
+
+  <div class="drop-veil" aria-hidden="true">
+    <span>Suelta un <strong>.glb</strong> para ver tu propio modelo</span>
+  </div>
+
+  <footer class="hud">
+    <p class="hint">Arrastra para orbitar · rueda para acercarte · mueve el cursor y Alice te mirará</p>
+    <div class="controls" role="toolbar" aria-label="Controles de la escena">
+      <button type="button" data-action="general">General</button>
+      <button type="button" data-action="portrait">Retrato</button>
+      <button type="button" data-action="low">Contrapicado</button>
+      <span class="controls__sep" aria-hidden="true"></span>
+      <button type="button" data-action="rotate" class="is-on" aria-pressed="true">Órbita</button>
+      <button type="button" data-action="vorpal" aria-pressed="false">Vorpal</button>
+      <button type="button" data-action="glb">Cargar GLB</button>
+    </div>
+  </footer>
+
+  <div id="notice" class="notice" role="status" aria-live="polite"></div>
+
+  <div id="loader" class="loader">
+    <div class="loader__inner">
+      <p class="loader__kicker">A través de la madriguera</p>
+      <h2>Alice</h2>
+      <div class="loader__bar"><i></i></div>
+      <p class="loader__status">Invocando el País de las Maravillas…</p>
+    </div>
+  </div>
+
+  <noscript>
+    <p class="noscript">Esta experiencia necesita JavaScript y WebGL 2.</p>
+  </noscript>
+
+  <input id="file" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden />
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

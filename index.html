@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Checkmate Studio · visor y editor 3D</title>
+  <meta name="description" content="Visor y editor 3D ligero en el navegador para OBJ/MTL, GLB/GLTF, STL, PLY y DAE. Carga Checkmate.obj, inspecciona materiales, edita transformaciones y exporta GLB." />
+  <link rel="stylesheet" href="./studio.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__glyph" aria-hidden="true">♞</span>
+        <div class="brand__text">
+          <strong>CHECKMATE</strong>
+          <span>3D studio</span>
+        </div>
+      </div>
+
+      <nav class="filebar" aria-label="Archivo">
+        <button type="button" data-action="open-files">Abrir archivos</button>
+        <button type="button" data-action="open-folder">Abrir carpeta</button>
+        <button type="button" data-action="load-demo">Demo</button>
+        <span id="file-label" class="file-label" title="Archivo actual">—</span>
+      </nav>
+
+      <div class="topbar__actions">
+        <button type="button" class="btn btn--ghost only-mobile" data-action="toggle-left">Escena</button>
+        <button type="button" class="btn btn--ghost only-mobile" data-action="toggle-right">Inspector</button>
+        <button type="button" class="btn" data-action="export">Exportar GLB</button>
+        <button type="button" class="btn btn--icon" data-action="shot" title="Guardar captura PNG">PNG</button>
+      </div>
+    </header>
+
+    <aside class="panel panel--left" id="panel-left" aria-label="Escena y jerarquía">
+      <div class="panel__head">
+        <h2>Escena</h2>
+        <span class="panel__meta" id="scene-count">—</span>
+      </div>
+      <div class="tree" id="tree" role="tree" aria-label="Jerarquía del modelo"></div>
+      <div class="panel__section">
+        <div class="panel__head"><h3>Métricas</h3></div>
+        <dl class="stats" id="stats">
+          <div><dt>Mallas</dt><dd>—</dd></div>
+          <div><dt>Triángulos</dt><dd>—</dd></div>
+          <div><dt>Vértices</dt><dd>—</dd></div>
+          <div><dt>Materiales</dt><dd>—</dd></div>
+          <div><dt>Dimensiones</dt><dd>—</dd></div>
+        </dl>
+      </div>
+      <div class="panel__foot">
+        <p>Soporta <b>OBJ + MTL</b>, <b>GLB/GLTF</b>, <b>STL</b>, <b>PLY</b> y <b>DAE</b>.</p>
+      </div>
+    </aside>
+
+    <main class="viewport" id="viewport">
+      <canvas id="view"></canvas>
+
+      <div class="vp vp--tl">
+        <span class="chip chip--strong" id="model-name">Checkmate</span>
+        <span class="chip" id="selection-label">Sin selección</span>
+      </div>
+
+      <div class="vp vp--tr views" role="group" aria-label="Vistas de cámara">
+        <button type="button" data-view="front">Frente</button>
+        <button type="button" data-view="three">3/4</button>
+        <button type="button" data-view="side">Lado</button>
+        <button type="button" data-view="top">Sup.</button>
+      </div>
+
+      <div class="vp vp--bl">
+        <span>Arrastra para orbitar · rueda para zoom · clic para seleccionar</span>
+      </div>
+      <div class="vp vp--br">
+        <span id="fps">— fps</span>
+      </div>
+
+      <div class="drop" id="drop">
+        <div>
+          <strong>Suelta los archivos aquí</strong>
+          <span>modelo + .mtl + texturas · o un único .glb / .stl / .ply</span>
+        </div>
+      </div>
+
+      <div class="viewer-loading" id="viewer-loading">
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="loading-text">Cargando Checkmate.obj…</p>
+      </div>
+
+      <div class="close-panels" id="close-panels" aria-hidden="true"></div>
+    </main>
+
+    <aside class="panel panel--right" id="panel-right" aria-label="Inspector">
+      <div class="panel__head">
+        <h2>Inspector</h2>
+        <button type="button" class="btn btn--tiny" id="focus-btn">Enfocar</button>
+      </div>
+      <div class="panel__scroll">
+        <details class="group" open>
+          <summary>Transformar</summary>
+          <div id="transform" class="group__body"></div>
+        </details>
+
+        <details class="group" open>
+          <summary>Material</summary>
+          <div id="material" class="group__body"></div>
+        </details>
+
+        <details class="group" open>
+          <summary>Escena</summary>
+          <div class="group__body">
+            <label class="slider">
+              <span>Exposición</span>
+              <input type="range" id="exposure" min="0.3" max="2" step="0.01" value="1" />
+              <output id="exposure-out">1.00</output>
+            </label>
+            <label class="slider">
+              <span>Luz principal</span>
+              <input type="range" id="key-light" min="0" max="4" step="0.05" value="2.1" />
+              <output id="key-light-out">2.10</output>
+            </label>
+            <label class="slider">
+              <span>Entorno</span>
+              <input type="range" id="env-intensity" min="0" max="2" step="0.02" value="0.45" />
+              <output id="env-intensity-out">0.45</output>
+            </label>
+
+            <div class="field">
+              <span class="field__label">Fondo</span>
+              <div class="swatches" id="swatches">
+                <button type="button" class="swatch is-on" data-bg="studio" style="--c:#0b0e13" title="Estudio"></button>
+                <button type="button" class="swatch" data-bg="midnight" style="--c:#04060b" title="Medianoche"></button>
+                <button type="button" class="swatch" data-bg="ink" style="--c:#111827" title="Tinta"></button>
+                <button type="button" class="swatch" data-bg="wine" style="--c:#1b0c12" title="Borgoña"></button>
+                <button type="button" class="swatch" data-bg="paper" style="--c:#d7dde5" title="Papel"></button>
+              </div>
+            </div>
+
+            <div class="toggles">
+              <label class="check"><input type="checkbox" id="t-floor" checked /> Suelo</label>
+              <label class="check"><input type="checkbox" id="t-grid" checked /> Cuadrícula</label>
+              <label class="check"><input type="checkbox" id="t-shadows" checked /> Sombras</label>
+              <label class="check"><input type="checkbox" id="t-rotate" /> Órbita</label>
+              <label class="check"><input type="checkbox" id="t-wire" /> Wireframe</label>
+              <label class="check"><input type="checkbox" id="t-skeleton" /> Esqueleto</label>
+            </div>
+
+            <div class="field">
+              <span class="field__label">Escala del modelo</span>
+              <div class="inline">
+                <input type="number" id="model-scale" step="0.01" min="0.001" max="1000" value="1" />
+                <button type="button" class="btn btn--tiny" id="apply-scale">Aplicar</button>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </aside>
+
+    <footer class="statusbar">
+      <span id="status">Iniciando…</span>
+      <span class="statusbar__right"><span id="format-info">—</span><span class="sep">·</span>Three.js r169<span class="sep">·</span>WebGL 2</span>
+    </footer>
+  </div>
+
+  <input id="file-input" type="file" multiple hidden
+         accept=".obj,.mtl,.glb,.gltf,.bin,.stl,.ply,.dae,.png,.jpg,.jpeg,.webp,.tga,.bmp" />
+  <input id="folder-input" type="file" webkitdirectory multiple hidden />
+  <input id="texture-input" type="file" accept="image/*" hidden />
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+  <script type="module" src="./studio/main.js"></script>
+</body>
+</html>
