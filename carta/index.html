@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Una carta para Juana</title>
+  <meta name="theme-color" content="#0c0709">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=IM+Fell+English:ital@0;1&family=Pinyon+Script&display=swap">
+  <link rel="stylesheet" href="css/carta.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body data-state="loading">
+  <div id="stage"></div>
+  <div class="vignette"></div>
+  <div class="grain"></div>
+
+  <!-- Filigrana en las esquinas -->
+  <template id="tpl-orn">
+    <svg viewBox="0 0 150 150" fill="none" stroke="currentColor" aria-hidden="true">
+      <path d="M6 144V40C6 21 21 6 40 6h104" stroke-width="1.4"/>
+      <path d="M14 136V46c0-18 14-32 32-32h90" stroke-width=".7"/>
+      <path d="M26 26c14 0 24 10 24 24-14 0-24-10-24-24z" fill="currentColor" stroke="none"/>
+      <path d="M50 26c18-4 34 2 46 14M26 50c-4 18 2 34 14 46" stroke-width="1"/>
+      <circle cx="96" cy="40" r="3" fill="currentColor" stroke="none"/>
+      <circle cx="40" cy="96" r="3" fill="currentColor" stroke="none"/>
+      <path d="M118 12c-6 6-6 14 0 18M12 118c6-6 14-6 18 0" stroke-width="1"/>
+    </svg>
+  </template>
+  <div class="frame-orn tl"></div><div class="frame-orn tr"></div>
+  <div class="frame-orn bl"></div><div class="frame-orn br"></div>
+
+  <!-- Carga -->
+  <div id="loader" role="status">
+    <svg class="loader-ring" viewBox="0 0 100 100" aria-hidden="true">
+      <g class="spin" fill="none" stroke="currentColor">
+        <circle cx="50" cy="50" r="44" stroke-width="1.5"/>
+        <circle cx="50" cy="50" r="38" stroke-width=".7" stroke-dasharray="1 6"/>
+      </g>
+      <g fill="currentColor" font-family="Georgia, serif" font-size="9" text-anchor="middle">
+        <text x="50" y="16">XII</text><text x="86" y="53">III</text><text x="50" y="91">VI</text><text x="14" y="53">IX</text>
+      </g>
+      <line class="hand" x1="50" y1="50" x2="50" y2="22" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="50" cy="50" r="2.5" fill="currentColor"/>
+    </svg>
+    <p class="loader-text">Cayendo por la madriguera…</p>
+    <p class="loader-pct" id="loaderPct">0 %</p>
+  </div>
+
+  <!-- Escena inicial -->
+  <div id="intro">
+    <header class="title">
+      <p class="title-pre"></p>
+      <h1 class="title-name"></h1>
+      <p class="title-sub"></p>
+    </header>
+    <div></div>
+    <div class="cta-wrap">
+      <button class="cta" id="openBtn" type="button">Abrir la carta</button>
+      <p class="cta-hint">o toca a Alice</p>
+    </div>
+  </div>
+
+  <!-- Lector -->
+  <div id="reader">
+    <div class="book-fly"><div class="book-host" id="bookHost"></div></div>
+  </div>
+  <div class="reader-ui">
+    <button class="nav-btn" id="prevBtn" type="button" aria-label="Página anterior">‹</button>
+    <span class="page-label" id="pageLabel"></span>
+    <button class="nav-btn" id="nextBtn" type="button" aria-label="Página siguiente">›</button>
+  </div>
+  <button class="close-btn" id="closeBtn" type="button" aria-label="Cerrar la carta">✕</button>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
