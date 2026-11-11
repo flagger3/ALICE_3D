@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AliceAnimator } from './alice-animator.js';
-import { addLights, createFloor, createCards, createMotes, createBookProp } from './decor.js';
+import { addLights, createFloor, createCards, createMotes, createBookProp, pickPalette } from './decor.js';
 import { Libro } from './libro.js';
 import { CARTA } from '../contenido.js';
 
@@ -35,17 +35,19 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+const PAL = pickPalette();
+document.body.dataset.paleta = PAL.name;
+renderer.toneMappingExposure = PAL.exposure;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 $('#stage').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x170910, 4.5, 11);
-addLights(scene);
-scene.add(createFloor());
-const cards = createCards(reducedMotion ? 8 : 14);
-const motes = createMotes(reducedMotion ? 80 : 260);
+scene.fog = new THREE.Fog(PAL.fog.color, PAL.fog.near, PAL.fog.far);
+addLights(scene, PAL);
+scene.add(createFloor(PAL));
+const cards = createCards(reducedMotion ? 8 : 14, PAL);
+const motes = createMotes(reducedMotion ? 80 : 260, PAL);
 scene.add(cards, motes);
 
 // ---------- Cámara: planos con transiciones suaves + paralaje ----------

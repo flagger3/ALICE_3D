@@ -3,19 +3,53 @@
 // Estética inspirada en lo victoriano/gótico, con elementos propios.
 import * as THREE from 'three';
 
-export const PALETTE = {
-  night: 0x0c0709,
-  blood: 0x8e0f1b,
-  bone: 0xefe4d0,
-  gold: 0xc9a24a,
+// ---------- Paletas del escenario ----------
+// Todo el color y la luz de la escena 3D sale de aquí. La página (fondo CSS y
+// viñeta) usa la misma clave vía body[data-paleta]. Elige con ?paleta=<clave>.
+//   sangre  — oscura: rojo sangre seco, foco más cerrado, sin brillo en el suelo
+//   carmesi — la original, más luminosa
+export const PALETTES = {
+  sangre: {
+    exposure: 0.9,
+    fog: { color: 0x0b0305, near: 3.6, far: 9.5 },
+    hemi: { sky: 0xd9b8b0, ground: 0x080203, intensity: 0.16 },
+    // Foco más cerrado (charco de luz sobre Alice) y algo más cálido/rojizo
+    spot: { color: 0xffcfb4, intensity: 30, angle: 0.39, penumbra: 0.8 },
+    rimL: { color: 0xa3122a, intensity: 1.15 },
+    rimR: { color: 0x3f9c95, intensity: 0.4 },
+    fill: { color: 0xe8b8a4, intensity: 0.32 },
+    floor: { dark: '#1c0407', light: '#4b3c33', roughness: 0.5, metalness: 0.05 },
+    cardTint: 0xc9bdb0,
+    motes: { colors: [0xd9583c, 0x9e1027, 0xe0a46a], opacity: 0.6 },
+  },
+  carmesi: {
+    exposure: 1.05,
+    fog: { color: 0x170910, near: 4.5, far: 11 },
+    hemi: { sky: 0xffe9dc, ground: 0x1a0b10, intensity: 0.35 },
+    spot: { color: 0xffe6cc, intensity: 38, angle: 0.42, penumbra: 0.65 },
+    rimL: { color: 0xff3d6e, intensity: 1.6 },
+    rimR: { color: 0x57d6c9, intensity: 0.9 },
+    fill: { color: 0xffd9c2, intensity: 0.55 },
+    floor: { dark: '#3a0a10', light: '#8c7d6c', roughness: 0.38, metalness: 0.1 },
+    cardTint: 0xffffff,
+    motes: { colors: [0xffb38a, 0xff5577, 0xffe3a6], opacity: 0.85 },
+  },
 };
+export const DEFAULT_PALETTE = 'sangre';
+
+/** Paleta activa: ?paleta=… si existe, si no la predeterminada. */
+export function pickPalette() {
+  const key = new URLSearchParams(location.search).get('paleta');
+  const name = key && PALETTES[key] ? key : DEFAULT_PALETTE;
+  return { name, ...PALETTES[name] };
+}
 
 // ---------- Luces ----------
-export function addLights(scene) {
-  scene.add(new THREE.HemisphereLight(0xffe9dc, 0x1a0b10, 0.35));
+export function addLights(scene, P = PALETTES[DEFAULT_PALETTE]) {
+  scene.add(new THREE.HemisphereLight(P.hemi.sky, P.hemi.ground, P.hemi.intensity));
 
   // Foco cenital cálido: "escenario"
-  const spot = new THREE.SpotLight(0xffe6cc, 38, 9, 0.42, 0.65, 1.6);
+  const spot = new THREE.SpotLight(P.spot.color, P.spot.intensity, 9, P.spot.angle, P.spot.penumbra, 1.6);
   spot.position.set(1.2, 4.6, 2.4);
   spot.target.position.set(0, 0.9, 0);
   spot.castShadow = true;
@@ -25,25 +59,25 @@ export function addLights(scene) {
   scene.add(spot, spot.target);
 
   // Contraluces de color (carmesí y verde azulado) para recortar la silueta
-  const rimL = new THREE.DirectionalLight(0xff3d6e, 1.6);
+  const rimL = new THREE.DirectionalLight(P.rimL.color, P.rimL.intensity);
   rimL.position.set(-3, 2.2, -2.5);
-  const rimR = new THREE.DirectionalLight(0x57d6c9, 0.9);
+  const rimR = new THREE.DirectionalLight(P.rimR.color, P.rimR.intensity);
   rimR.position.set(3, 1.8, -2.8);
   // Relleno frontal suave para la cara
-  const fill = new THREE.DirectionalLight(0xffd9c2, 0.55);
+  const fill = new THREE.DirectionalLight(P.fill.color, P.fill.intensity);
   fill.position.set(-1.5, 1.6, 3);
   scene.add(rimL, rimR, fill);
   return { spot };
 }
 
 // ---------- Suelo: tablero que se desvanece ----------
-export function createFloor() {
+export function createFloor(P = PALETTES[DEFAULT_PALETTE]) {
   const N = 16, S = 64;
   const c = document.createElement('canvas');
   c.width = c.height = N * S;
   const g = c.getContext('2d');
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    g.fillStyle = (x + y) % 2 ? '#3a0a10' : '#8c7d6c';
+    g.fillStyle = (x + y) % 2 ? P.floor.dark : P.floor.light;
     g.fillRect(x * S, y * S, S, S);
   }
   // Desgaste sutil
@@ -66,7 +100,7 @@ export function createFloor() {
 
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(4, 96),
-    new THREE.MeshStandardMaterial({ map, alphaMap, transparent: true, roughness: 0.38, metalness: 0.1, depthWrite: false }),
+    new THREE.MeshStandardMaterial({ map, alphaMap, transparent: true, roughness: P.floor.roughness, metalness: P.floor.metalness, depthWrite: false }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -118,18 +152,18 @@ function roundRect(g, x, y, w, h, r) {
   g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
 }
 
-export function createCards(count = 14) {
+export function createCards(count = 14, P = PALETTES[DEFAULT_PALETTE]) {
   const group = new THREE.Group();
   const geo = new THREE.PlaneGeometry(0.13, 0.183);
   const backTex = new THREE.CanvasTexture(cardBack());
   backTex.colorSpace = THREE.SRGBColorSpace;
-  const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.6 });
+  const backMat = new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.6, color: P.cardTint });
   const cards = [];
   for (let i = 0; i < count; i++) {
     const tex = new THREE.CanvasTexture(cardFace(RANKS[i % RANKS.length], SUITS[i % SUITS.length]));
     tex.colorSpace = THREE.SRGBColorSpace;
     const card = new THREE.Group();
-    const front = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 }));
+    const front = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, color: P.cardTint }));
     const back = new THREE.Mesh(geo, backMat);
     back.rotation.y = Math.PI;
     card.add(front, back);
@@ -162,11 +196,11 @@ export function createCards(count = 14) {
 }
 
 // ---------- Motas de luz ----------
-export function createMotes(count = 260) {
+export function createMotes(count = 260, P = PALETTES[DEFAULT_PALETTE]) {
   const pos = new Float32Array(count * 3);
   const vel = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
-  const palette = [new THREE.Color(0xffb38a), new THREE.Color(0xff5577), new THREE.Color(0xffe3a6)];
+  const palette = P.motes.colors.map((c) => new THREE.Color(c));
   const reset = (i, anyY) => {
     const r = 0.6 + Math.random() * 3.2, a = Math.random() * Math.PI * 2;
     pos[i * 3] = Math.sin(a) * r;
@@ -193,7 +227,7 @@ export function createMotes(count = 260) {
 
   const pts = new THREE.Points(geo, new THREE.PointsMaterial({
     size: 0.035, map: new THREE.CanvasTexture(sc), vertexColors: true, transparent: true,
-    opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending,
+    opacity: P.motes.opacity, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
   pts.frustumCulled = false;
   pts.userData.update = (t, dt) => {

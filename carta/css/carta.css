@@ -41,6 +41,14 @@ body.hover-alice #stage { cursor: pointer; }
 /* Viñeta y grano: atmósfera "película antigua" */
 .vignette, .grain { position: fixed; inset: 0; pointer-events: none; }
 .vignette { background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(5, 2, 3, .78) 100%); }
+
+/* Paleta "sangre" (oscura): fondo de rojo sangre seco y viñeta más cerrada */
+body[data-paleta="sangre"] {
+  background: radial-gradient(110% 85% at 50% 40%, #1d070c 0%, #0f0406 45%, #050102 82%);
+}
+body[data-paleta="sangre"] .vignette {
+  background: radial-gradient(ellipse at 50% 46%, transparent 34%, rgba(3, 1, 1, .9) 100%);
+}
 .grain {
   opacity: .09; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
