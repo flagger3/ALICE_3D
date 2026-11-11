@@ -45,11 +45,11 @@ const HOLD_STYLES = {
   palm: {
     upperArmDown: 60, upperArmFwd: 18, forearmBend: 92, twist: 90, wristUp: 0.8,
     finger: [2, 3, 2], thumbX: [0, 0, 0],
-    grip: { along: 0.7, up: -0.06, inward: 0, fwd: 0.025, alignToPalm: true },
+    grip: { along: 0.7, up: -0.06, inward: 0, fwd: 0.019, alignToPalm: true },
   },
 };
 const BLINK = { upperLid: 52, lowerLid: -12, duration: 0.16 };
-const GAZE = { headYaw: 45, headPitch: 22, eyeYaw: 22, eyePitch: 14, neckShare: 0.35 };
+const GAZE = { headYaw: 25, headPitch: 12, eyeYaw: 22, eyePitch: 14, neckShare: 0.35 };
 const MOUTH = {
   jawOpen: 14, jawRound: 6,            // grados
   cornerWide: [0.006, 0.002, -0.002],  // desplazamiento comisura izq. (la der. se refleja en X)
@@ -75,6 +75,23 @@ const CHAINS = [
   ...['Left_Side', 'Left_Back', 'Right_Back', 'Left_Front', 'Right_Side', 'Right_Front']
     .map((s) => ['skirt', seq('Skirt_' + s, 6)]),
 ];
+
+// ---- Colisiones del pelo ----
+// Esferas (centro en espacio del modelo con la pose relajada, radio en m) pegadas a un hueso,
+// medidas sobre la malla: hombreras, trapecios y espalda alta. Si un mechón entra
+// en una, se gira su raíz hacia fuera lo justo para que quede apoyado encima.
+const HAIR_COLLIDERS = [
+  { bone: 'Arm_Left_UpperArm',  c: [0.135, 1.30, 0.0],   r: 0.085 },
+  { bone: 'Arm_Right_UpperArm', c: [-0.135, 1.30, 0.0],  r: 0.085 },
+  { bone: 'Bip01-Spine2',       c: [0.06, 1.30, -0.01],  r: 0.075 },
+  { bone: 'Bip01-Spine2',       c: [-0.06, 1.30, -0.01], r: 0.075 },
+  { bone: 'Bip01-Spine2',       c: [0, 1.27, -0.005],    r: 0.055 },
+  { bone: 'Arm_Left_UpperArm',  c: [0.12, 1.28, -0.04],  r: 0.06 },  // parte trasera de las hombreras
+  { bone: 'Arm_Right_UpperArm', c: [-0.12, 1.28, -0.04], r: 0.06 },
+  // Pecho: ajustado para no tocar el pelo en reposo (sus puntas van metidas en el corpiño)
+  { bone: 'Bip01-Spine2',       c: [0, 1.22, 0.04],      r: 0.104 },
+];
+const HAIR_COLLISION = { samples: 18, margin: 0.004, iterations: 3, maxAngle: 40 };
 
 export class AliceAnimator {
   /** @param {THREE.Object3D} root  gltf.scene de Checkmate.glb (en reposo) */
@@ -134,13 +151,15 @@ export class AliceAnimator {
       root.worldToLocal(bones[0].getWorldPosition(tmp));
       root.worldToLocal(bones[bones.length - 1].getWorldPosition(tmp2));
       this.chains.push({
-        bones, cfg: CHAIN_TYPES[type],
+        bones, type, cfg: CHAIN_TYPES[type],
         length: Math.max(tmp.distanceTo(tmp2), 0.05),
         phase: Math.random() * 100,
         s: new THREE.Vector2(), v: new THREE.Vector2(),          // desplazamiento (x,z) y velocidad
         prevPos: null, prevVel: new THREE.Vector3(), tip: new THREE.Vector3(),
       });
     }
+
+    this.colliders = [];
 
     // Interruptores públicos; los pesos se interpolan para transiciones suaves.
     this.enabled = { pose: true, breathing: true, sway: true, blink: true, gaze: true, secondary: true, prop: false };
@@ -172,6 +191,11 @@ export class AliceAnimator {
     this._e = new THREE.Euler(0, 0, 0, 'YXZ');
     this._v = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
+
+    // Las esferas de colisión se midieron con los brazos relajados: fijarlas en esa pose
+    this.update(0);
+    this.initHairCollision();
+    this.resetPose();
   }
 
   /** Boca objetivo {open, wide, round} en 0..1. immediate=true salta el suavizado. */
@@ -351,6 +375,7 @@ export class AliceAnimator {
 
     // --- Movimiento secundario ---
     this.updateSecondary(dt, w.secondary);
+    this.collideHair();
 
     // --- Objeto en la mano: aparece/desaparece encogiéndose hacia el puño ---
     if (this.prop) {
@@ -471,6 +496,95 @@ export class AliceAnimator {
       const az = clamp(c.s.x / c.length, -max, max) * weight;
       const n = c.bones.length;
       for (const b of c.bones) this.rotateModel(b, ax / n, 0, az / n);
+    }
+  }
+
+  /** Prepara las esferas de colisión y elige vértices de muestra de cada mechón. */
+  initHairCollision() {
+    const root = this.root;
+    root.updateMatrixWorld(true);
+    this.colliders = [];
+    for (const k of HAIR_COLLIDERS) {
+      const bone = this.bones[k.bone];
+      if (!bone) continue;
+      const local = bone.worldToLocal(root.localToWorld(new THREE.Vector3(...k.c)));
+      this.colliders.push({ bone, local, r: k.r, center: new THREE.Vector3() });
+    }
+
+    // La malla del pelo se separa bastante de sus huesos: se usan vértices reales
+    // de los dos tercios inferiores de cada mechón, repartidos (muestreo del punto más lejano).
+    const meshes = [];
+    root.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    this.hairMeshes = new Set();
+    const v = new THREE.Vector3(), p0 = new THREE.Vector3();
+    for (const c of this.chains) {
+      if (c.type !== 'hair') continue;
+      root.worldToLocal(c.bones[0].getWorldPosition(p0));
+      const cand = [];
+      for (const m of meshes) {
+        const inChain = m.skeleton.bones.map((b) => c.bones.includes(b));
+        if (!inChain.some(Boolean)) continue;
+        m.skeleton.update();
+        const sk = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight;
+        for (let i = 0; i < sk.count; i++) {
+          let best = 0, bi = -1;
+          for (let k = 0; k < 4; k++) {
+            const w = sw.getComponent(i, k);
+            if (w > best) { best = w; bi = sk.getComponent(i, k); }
+          }
+          if (bi < 0 || !inChain[bi]) continue;
+          root.worldToLocal(m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld));
+          cand.push({ mesh: m, i, p: v.clone(), d: v.distanceTo(p0) });
+        }
+      }
+      if (!cand.length) continue;
+      const maxD = Math.max(...cand.map((s) => s.d));
+      const pool = cand.filter((s) => s.d > maxD * 0.3);
+      const picked = [pool.reduce((a, b) => (b.d > a.d ? b : a))];
+      while (picked.length < Math.min(HAIR_COLLISION.samples, pool.length)) {
+        let far = null, farD = -1;
+        for (const s of pool) {
+          const d = Math.min(...picked.map((p) => p.p.distanceToSquared(s.p)));
+          if (d > farD) { farD = d; far = s; }
+        }
+        picked.push(far);
+      }
+      c.samples = picked.map(({ mesh, i }) => ({ mesh, i }));
+      for (const s of c.samples) this.hairMeshes.add(s.mesh);
+    }
+    this._colN = new THREE.Vector3(); this._colQ = new THREE.Vector3();
+    this._colP = new THREE.Vector3(); this._colA = new THREE.Vector3();
+  }
+
+  /** Saca los mechones que hayan entrado en hombros o espalda girando su raíz. */
+  collideHair() {
+    if (!this.colliders?.length) return;
+    const root = this.root, v = this._v, n = this._colN, q = this._colQ, p0 = this._colP, axis = this._colA;
+    const { margin, iterations, maxAngle } = HAIR_COLLISION;
+    for (let it = 0; it < iterations; it++) {
+      root.updateMatrixWorld(true);
+      for (const m of this.hairMeshes) m.skeleton.update();
+      for (const col of this.colliders) root.worldToLocal(col.bone.localToWorld(col.center.copy(col.local)));
+      for (const c of this.chains) {
+        if (!c.samples) continue;
+        let worst = 0;
+        for (const s of c.samples) {
+          root.worldToLocal(s.mesh.getVertexPosition(s.i, v).applyMatrix4(s.mesh.matrixWorld));
+          for (const col of this.colliders) {
+            const d = v.distanceTo(col.center);
+            const pen = col.r + margin - d;
+            if (pen > worst && d > 1e-6) { worst = pen; q.copy(v); n.subVectors(v, col.center).divideScalar(d); }
+          }
+        }
+        if (worst <= 0) continue;
+        // Girar la raíz: un ángulo α desplaza q a lo largo de n en α·|palanca × n|
+        root.worldToLocal(c.bones[0].getWorldPosition(p0));
+        axis.subVectors(q, p0).cross(n);
+        const L = axis.length();
+        if (L < 1e-5) continue;
+        axis.divideScalar(L);
+        this.rotateModelAxis(c.bones[0], axis, Math.min(worst / L, maxAngle * DEG));
+      }
     }
   }
 
