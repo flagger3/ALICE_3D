@@ -45,7 +45,7 @@ export function pickPalette() {
 }
 
 // ---------- Luces ----------
-export function addLights(scene, P = PALETTES[DEFAULT_PALETTE]) {
+export function addLights(scene, P = PALETTES[DEFAULT_PALETTE], { shadowSize = 2048 } = {}) {
   scene.add(new THREE.HemisphereLight(P.hemi.sky, P.hemi.ground, P.hemi.intensity));
 
   // Foco cenital cálido: "escenario"
@@ -53,7 +53,7 @@ export function addLights(scene, P = PALETTES[DEFAULT_PALETTE]) {
   spot.position.set(1.2, 4.6, 2.4);
   spot.target.position.set(0, 0.9, 0);
   spot.castShadow = true;
-  spot.shadow.mapSize.set(2048, 2048);
+  spot.shadow.mapSize.set(shadowSize, shadowSize);
   spot.shadow.bias = -0.0004;
   spot.shadow.normalBias = 0.02;
   scene.add(spot, spot.target);

@@ -2,7 +2,8 @@
 //
 // Estados (body[data-state]):
 //   loading → intro → offering (Alice levanta el libro) → opening (el libro
-//   vuela a primer plano) → reading → closing (vuelve a su mano) → returning → intro
+//   vuela a primer plano) → reading → closing (se cierra hoja a hoja) → fading
+//   (el libro se desvanece) → intro
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AliceAnimator } from './alice-animator.js';
@@ -15,8 +16,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TEST = new URLSearchParams(location.search).get('test');
 let state = 'loading';
+let readingSince = 0; // ver frame(): la escena se congela mientras se lee
 const setState = (s) => {
   state = s; document.body.dataset.state = s;
+  if (s === 'reading') readingSince = performance.now();
   if (TEST) console.log('STATE', s, performance.now().toFixed(0));
 };
 
@@ -29,8 +32,13 @@ const orn = $('#tpl-orn').content;
 document.querySelectorAll('.frame-orn').forEach((el) => el.appendChild(orn.cloneNode(true)));
 
 // ---------- Render ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Móviles: menos resolución interna y sombras más pequeñas (la pantalla es pequeña
+// y el ahorro de GPU se nota en la fluidez y la batería).
+const MOBILE = matchMedia('(pointer: coarse)').matches || Math.min(window.innerWidth, window.innerHeight) < 600;
+const MAX_PR = Math.min(window.devicePixelRatio, MOBILE ? 1.5 : 2);
+let pixelRatio = MAX_PR;
+const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE || window.devicePixelRatio < 2, alpha: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -44,10 +52,10 @@ $('#stage').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(PAL.fog.color, PAL.fog.near, PAL.fog.far);
-addLights(scene, PAL);
+addLights(scene, PAL, { shadowSize: MOBILE ? 1024 : 2048 });
 scene.add(createFloor(PAL));
-const cards = createCards(reducedMotion ? 8 : 14, PAL);
-const motes = createMotes(reducedMotion ? 80 : 260, PAL);
+const cards = createCards(reducedMotion ? 8 : MOBILE ? 10 : 14, PAL);
+const motes = createMotes(reducedMotion ? 80 : MOBILE ? 160 : 260, PAL);
 scene.add(cards, motes);
 
 // ---------- Cámara: planos con transiciones suaves + paralaje ----------
@@ -193,9 +201,9 @@ async function deliver() {
   document.body.classList.remove('hover-alice');
   shot = SHOTS.offer;
   animator.showProp(true);
-  await sleep(1100);
+  await sleep(600);
   await waitFor(() => animator.propReady);
-  await sleep(350);
+  await sleep(150);
 
   // El libro sale de su mano hacia el primer plano
   libro.layout();
@@ -208,42 +216,31 @@ async function deliver() {
   setState('opening');
   fly.classList.add('animating');
   fly.style.transform = 'none';
-  await sleep(1050);
+  await sleep(950);
 
   setState('reading');
   animator.showProp(false); // Alice baja el brazo mientras se lee
   shot = SHOTS.idle;
-  await sleep(450);
+  await sleep(250);
   if (state === 'reading' && libro.flips === 0) libro.next(); // abrir la portada
 }
 
 async function closeReader() {
   if (state !== 'reading') return;
   setState('closing');
-  // Cerrar el libro
-  if (libro.flips !== 0) {
-    libro.flips = 0; libro.focus = 'R';
-    libro.apply(false, true);
-    await sleep(950);
-  }
-  // Alice levanta la mano para recibirlo
-  shot = SHOTS.offer;
-  animator.showProp(true);
-  await sleep(900);
-  await waitFor(() => animator.propReady);
-  fly.classList.add('animating');
-  fly.style.transform = flyTransform(propScreenRect());
-  await sleep(1000);
-
-  animator.setPropHidden(false);
-  setState('returning');
-  fly.classList.remove('animating');
+  // 1) Cerrar el libro: las hojas caen en cascada hasta la portada
+  const dur = libro.close();
+  if (dur) await sleep(dur + 150);
+  // 2) El libro cerrado se desvanece mientras la escena vuelve a enfocarse
+  setState('fading');
+  fly.classList.add('vanish');
+  await sleep(1100);
+  // 3) Dejarlo todo listo para volver a abrirla
+  setState('intro'); // oculta el lector antes de devolverle la opacidad al libro
+  fly.classList.remove('vanish', 'animating');
   fly.style.transform = 'none';
-  await sleep(1300);
-  animator.showProp(false); // guarda el libro
-  shot = SHOTS.idle;
-  await sleep(900);
-  setState('intro');
+  libro.reset();
+  animator.setPropHidden(false); // el libro vuelve a "aparecer" en su mano solo al ofrecerlo
 }
 
 $('#openBtn').addEventListener('click', deliver);
@@ -281,14 +278,41 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.render(scene, camera); // al redimensionar se borra el lienzo (importa si la escena está en pausa)
   libro.layout();
   libro.apply(true);
 });
 
+// Resolución adaptativa: si el equipo no llega a ~45 fps, bajar la resolución interna
+// por pasos (nunca por debajo de 1) en lugar de dejar que todo vaya a tirones.
+const perf = { frames: 0, time: 0, last: performance.now() };
+function adaptQuality() {
+  const now = performance.now();
+  const ms = now - perf.last;
+  perf.last = now;
+  if (ms > 250) return; // pestaña en segundo plano o pausa: no cuenta
+  perf.frames++; perf.time += ms;
+  if (perf.time < 2000) return;
+  const fps = perf.frames / (perf.time / 1000);
+  perf.frames = 0; perf.time = 0;
+  if (fps < 45 && pixelRatio > 1) {
+    pixelRatio = Math.max(1, pixelRatio - 0.25);
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+}
+
+// Mientras se lee, la escena queda detrás del libro, desenfocada y oscurecida:
+// tras la transición se congela el último fotograma. Así la GPU queda libre para
+// pasar las páginas con fluidez (el desenfoque de pantalla completa es caro si
+// el lienzo cambia en cada fotograma).
+const PAUSE_AFTER = 1800; // ms: deja terminar el desenfoque y que Alice baje el brazo
 const clock = new THREE.Clock();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   const t = clock.elapsedTime;
+  if (state === 'reading' && performance.now() - readingSince > PAUSE_AFTER) { perf.last = performance.now(); return; }
+  if (!TEST) adaptQuality();
   updateCamera(dt);
   updateGaze();
   animator?.update(dt);
@@ -306,7 +330,7 @@ else renderer.setAnimationLoop(frame);
 //   ?test=offer            Alice sosteniendo el libro
 //   ?test=read&pos=N       libro abierto en la posición de lectura N
 //   ?test=flow             secuencia real: entregar y abrir
-//   ?test=roundtrip        secuencia real: entregar, abrir, cerrar y devolver
+//   ?test=roundtrip        secuencia real: entregar, abrir, cerrar y desvanecer (&pasar=N páginas antes)
 function snapCamera() {
   const p = framed(shot.pos, shot.look);
   camPos.copy(p); camLook.copy(shot.look);
@@ -348,6 +372,10 @@ function runTest() {
       console.log('FLOW opened, flips', libro.flips, 'propHidden', animator.propHidden);
       if (TEST === 'roundtrip') {
         await sleep(1500);
+        // &pasar=N : pasar N páginas antes de cerrar (para ver el cierre en cascada)
+        const pasar = +(new URLSearchParams(location.search).get('pasar') || 0);
+        for (let i = 0; i < pasar; i++) { await waitFor(() => !libro.busy); libro.next(); await sleep(1200); }
+        console.log('ROUNDTRIP flips before close', libro.flips);
         await closeReader();
         console.log('ROUNDTRIP done, prop weight', animator.weights.prop.toFixed(2), 'visible', animator.prop.visible);
       }

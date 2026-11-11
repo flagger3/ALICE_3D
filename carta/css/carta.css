@@ -40,6 +40,7 @@ button { font: inherit; color: inherit; }
 #stage { position: fixed; inset: 0; transition: filter 1.1s var(--ease-out), transform 1.1s var(--ease-out); }
 #stage canvas { display: block; width: 100%; height: 100%; }
 body[data-state="reading"] #stage,
+body[data-state="closing"] #stage,
 body[data-state="opening"] #stage { filter: blur(7px) brightness(.42) saturate(.8); transform: scale(1.03); }
 body[data-state="intro"] #stage { cursor: default; }
 body.hover-alice #stage { cursor: pointer; }
@@ -60,6 +61,12 @@ body[data-paleta="sangre"] .vignette {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   animation: grain 1.2s steps(6) infinite;
 }
+/* El grano se mezcla con toda la pantalla en cada fotograma: fuera en móviles y al leer */
+body[data-state="reading"] .grain { display: none; }
+@media (pointer: coarse) { .grain { display: none; } }
+/* El brillo dorado solo se anima mientras se ve */
+body:not([data-state="intro"]) .title-name { animation-play-state: paused; }
+.book-host:not(.is-closed) .cover-title { animation-play-state: paused; }
 @keyframes grain {
   0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -3%); }
   60% { transform: translate(-2%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); }
@@ -105,7 +112,7 @@ body[data-paleta="sangre"] .vignette {
 .title-sub { margin: 14px 0 0; font-family: var(--f-caps); font-weight: 600; font-size: clamp(13px, 1.55vw, 16px); letter-spacing: .26em; text-transform: uppercase; color: #dcb85e; text-shadow: var(--shadow-light); }
 .title .orn { width: 140px; color: var(--gold); opacity: .8; margin-top: 8px; }
 
-.cta-wrap { display: grid; justify-items: center; gap: 10px; opacity: 0; transform: translateY(12px); transition: opacity 1.2s var(--ease-out) 1.2s, transform 1.2s var(--ease-out) 1.2s; }
+.cta-wrap { display: grid; justify-items: center; gap: 10px; opacity: 0; transform: translateY(12px); transition: opacity 1.2s var(--ease-out) .8s, transform 1.2s var(--ease-out) .8s; }
 .cta {
   position: relative; cursor: pointer; border: 0; padding: 15px 34px 14px;
   font-family: var(--f-title); font-weight: 700; font-size: 15px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold-hi);
@@ -126,7 +133,8 @@ body:not([data-state="intro"]) .title, body:not([data-state="intro"]) .cta-wrap 
 
 /* ---------- Lector ---------- */
 #reader { position: fixed; inset: 0; visibility: hidden; }
-body[data-state="opening"] #reader, body[data-state="reading"] #reader, body[data-state="closing"] #reader { visibility: visible; }
+body[data-state="opening"] #reader, body[data-state="reading"] #reader,
+body[data-state="closing"] #reader, body[data-state="fading"] #reader { visibility: visible; }
 .book-fly {
   /* Centrado absoluto: en móvil el libro abierto es más ancho que la pantalla y
      un centrado con grid lo alinearía al borde izquierdo. `translate` se compone
@@ -134,7 +142,9 @@ body[data-state="opening"] #reader, body[data-state="reading"] #reader, body[dat
   position: absolute; left: 50%; top: calc(50% - 24px); translate: -50% -50%;
   transform-origin: 0 0; will-change: transform;
 }
-.book-fly.animating { transition: transform 1s cubic-bezier(.55, .05, .2, 1), opacity .5s; }
+.book-fly.animating { transition: transform .9s cubic-bezier(.55, .05, .2, 1), opacity .5s; }
+/* Al terminar de leer, el libro cerrado se desvanece en el aire */
+.book-fly.vanish { opacity: 0; scale: .94; transition: opacity 1s ease, scale 1.1s cubic-bezier(.4, 0, .2, 1); }
 
 .reader-ui { position: fixed; left: 0; right: 0; bottom: max(3vh, 16px); display: flex; justify-content: center; align-items: center; gap: 18px; opacity: 0; transform: translateY(10px); transition: opacity .6s, transform .6s var(--ease-out); pointer-events: none; }
 body[data-state="reading"] .reader-ui { opacity: 1; transform: none; pointer-events: auto; transition-delay: .3s; }
@@ -151,15 +161,18 @@ body[data-state="reading"] .close-btn { opacity: 1; pointer-events: auto; transi
 
 /* ---------- Libro ---------- */
 .book-host {
+  /* Giro de página: despega despacio, cruza y se posa suavemente */
+  --ease-page: cubic-bezier(.42, 0, .22, 1);
   --pw: 380px; --ph: calc(var(--pw) * 1.4);
   position: relative; width: calc(var(--pw) * 2); height: var(--ph);
   perspective: 2400px; perspective-origin: 50% 40%;
 }
-.book { position: absolute; inset: 0; transform-style: preserve-3d; transform: translateX(var(--x, 0)); transition: transform .85s cubic-bezier(.6, .05, .25, 1); }
+.book { position: absolute; inset: 0; transform-style: preserve-3d; transform: translateX(var(--x, 0)); transition: transform var(--flip, 1.05s) var(--ease-page); }
 .leaf {
   position: absolute; left: 50%; top: 0; width: var(--pw); height: 100%;
   transform-origin: left center; transform-style: preserve-3d;
-  transition: transform .9s cubic-bezier(.55, .05, .3, 1);
+  transition: transform var(--flip, 1.05s) var(--ease-page);
+  will-change: transform; /* cada hoja en su propia capa: giros sin repintar */
 }
 .leaf.flipped { transform: rotateY(-180deg); }
 .leaf.turning { z-index: 999 !important; }
@@ -167,7 +180,7 @@ body[data-state="reading"] .close-btn { opacity: 1; pointer-events: auto; transi
 .face.back { transform: rotateY(180deg); }
 .instant .book, .instant .leaf { transition: none !important; }
 /* Sombra de giro */
-.face::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .45s; }
+.face::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity calc(var(--flip, 1.05s) * .5) ease; }
 .face.front::after { background: linear-gradient(90deg, rgba(0, 0, 0, .35), transparent 60%); }
 .face.back::after { background: linear-gradient(270deg, rgba(0, 0, 0, .35), transparent 60%); }
 .leaf.turning .face::after { opacity: 1; }
@@ -176,7 +189,7 @@ body[data-state="reading"] .close-btn { opacity: 1; pointer-events: auto; transi
 .book-host::before {
   content: ''; position: absolute; left: 4%; right: 4%; bottom: -26px; height: 40px;
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, .55), transparent 70%); filter: blur(6px);
-  transform: translateX(var(--x, 0)); transition: transform .85s cubic-bezier(.6, .05, .25, 1), left .85s, right .85s;
+  transform: translateX(var(--x, 0)); transition: transform var(--flip, 1.05s) var(--ease-page), left var(--flip, 1.05s), right var(--flip, 1.05s);
 }
 .book-host.is-closed::before { left: 27%; right: 27%; }
 
@@ -211,8 +224,9 @@ body[data-state="reading"] .close-btn { opacity: 1; pointer-events: auto; transi
 .sig-name { font-family: var(--f-script); font-size: 2.1em; line-height: 1.2; color: var(--blood); }
 
 /* Tinta que aparece */
-.ink { opacity: 0; filter: blur(3px); transform: translateY(5px); transition: opacity 1s ease, filter 1s ease, transform 1s var(--ease-out); transition-delay: calc(var(--i, 0) * .38s + .1s); }
-.revealed .ink { opacity: 1; filter: none; transform: none; }
+/* Solo opacidad y desplazamiento (sin desenfoque): se animan en la GPU sin repintar */
+.ink { opacity: 0; transform: translateY(4px); transition: opacity .55s ease, transform .55s var(--ease-out); transition-delay: calc(var(--i, 0) * .12s + .05s); }
+.revealed .ink { opacity: 1; transform: none; }
 
 /* Guardas */
 .endpaper { display: grid; place-items: center; }
@@ -267,5 +281,5 @@ body[data-state="reading"] .close-btn { opacity: 1; pointer-events: auto; transi
 @media (prefers-reduced-motion: reduce) {
   .grain { animation: none; }
   .title-name, .cover-title { animation: none; }
-  .ink { transition-duration: .3s; transition-delay: 0s; transform: none; filter: none; }
+  .ink { transition-duration: .3s; transition-delay: 0s; transform: none; }
 }

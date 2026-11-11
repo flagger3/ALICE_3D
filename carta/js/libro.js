@@ -9,6 +9,11 @@
 // Modo simple (móvil): se ve una página; la vista se desplaza de la izquierda a
 // la derecha del pliego antes de pasar la hoja.
 
+// Tiempos (ms). La duración del giro se pasa al CSS como --flip.
+const FLIP_MS = 1050;        // pasar una hoja
+const CLOSE_MS = 1000;       // cada hoja al cerrar el libro
+const CLOSE_STAGGER = 110;   // desfase entre hojas al cerrar (cascada)
+
 const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -57,6 +62,7 @@ export class Libro {
       this.leaves.push(leaf);
     }
     this.faces = [...this.book.querySelectorAll('.face')];
+    host.style.setProperty('--flip', FLIP_MS + 'ms');
     this.layout();
     this.apply(true);
   }
@@ -107,7 +113,7 @@ export class Libro {
     const vw = window.innerWidth, vh = window.innerHeight;
     this.single = vw < 820 || vw / vh < 1.05;
     const pw = this.single
-      ? Math.min(430, vw - 48, (vh - 170) / 1.4)
+      ? Math.min(430, vw - 28, (vh - 160) / 1.4) // móvil: aprovechar el ancho (letra más grande)
       : Math.min(420, (vw - 200) / 2, (vh - 170) / 1.4);
     this.pw = Math.max(220, Math.floor(pw));
     this.host.style.setProperty('--pw', this.pw + 'px');
@@ -147,7 +153,11 @@ export class Libro {
 
   next() { this.go(this.index + 1); }
   prev() { this.go(this.index - 1); }
-  reset() { this.flips = 0; this.focus = 'R'; this.apply(true); }
+  reset() {
+    this.flips = 0; this.focus = 'R';
+    this.faces.forEach((f) => f.classList.remove('revealed')); // la tinta vuelve a aparecer al releer
+    this.apply(true);
+  }
 
   go(i) {
     const pos = this.positions;
@@ -177,7 +187,7 @@ export class Libro {
       if (was !== flipped && !instant) {
         leaf.classList.add('turning');
         clearTimeout(leaf._t);
-        leaf._t = setTimeout(() => leaf.classList.remove('turning'), 950);
+        leaf._t = setTimeout(() => leaf.classList.remove('turning'), FLIP_MS);
       }
     });
     this.host.classList.toggle('instant', instant);
@@ -186,10 +196,46 @@ export class Libro {
     // Revelar la tinta de las caras visibles (tras el giro)
     const visible = this.visibleFaces();
     clearTimeout(this._reveal);
-    this._reveal = setTimeout(() => visible.forEach((f) => f.classList.add('revealed')), flipping && !instant ? 520 : 60);
+    this._reveal = setTimeout(() => visible.forEach((f) => f.classList.add('revealed')), flipping && !instant ? FLIP_MS * 0.55 : 40);
 
-    if (flipping && !instant) { this.busy = true; setTimeout(() => { this.busy = false; }, 650); }
+    if (flipping && !instant) { this.busy = true; setTimeout(() => { this.busy = false; }, FLIP_MS * 0.6); }
     this.onchange?.(this);
+  }
+
+  /**
+   * Cierra el libro hoja a hoja, en cascada desde la de arriba hasta la portada,
+   * como cuando se deja caer un montón de páginas. Devuelve la duración total (ms).
+   */
+  close() {
+    const turned = [];
+    for (let i = this.flips - 1; i >= 0; i--) turned.push(i);
+    if (!turned.length) return 0;
+    const total = CLOSE_MS + (turned.length - 1) * CLOSE_STAGGER;
+    this.flips = 0; this.focus = 'R'; this.busy = true;
+    this.host.classList.remove('instant');
+    clearTimeout(this._reveal);
+    // El libro se recentra (portada a la derecha del lomo) durante toda la cascada
+    this.book.style.transitionDuration = total + 'ms';
+    this.host.style.setProperty('--x', -this.pw / 2 + 'px');
+    turned.forEach((i, k) => {
+      const leaf = this.leaves[i];
+      leaf.style.transitionDuration = CLOSE_MS + 'ms';
+      clearTimeout(leaf._t);
+      // Cada hoja conserva su sitio en la pila hasta que empieza a girar
+      leaf._t = setTimeout(() => {
+        leaf.classList.add('turning');
+        leaf.classList.remove('flipped');
+        leaf.style.zIndex = this.leafCount - i;
+        leaf._t = setTimeout(() => { leaf.classList.remove('turning'); leaf.style.transitionDuration = ''; }, CLOSE_MS);
+      }, k * CLOSE_STAGGER);
+    });
+    setTimeout(() => {
+      this.book.style.transitionDuration = '';
+      this.host.classList.add('is-closed');
+      this.busy = false;
+      this.onchange?.(this);
+    }, total);
+    return total;
   }
 
   visibleFaces() {
