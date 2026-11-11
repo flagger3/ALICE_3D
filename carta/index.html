@@ -9,10 +9,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Cinzel+Decorative:wght@400;700&family=IM+Fell+English:ital@0;1&family=Pinyon+Script&display=swap">
   <link rel="stylesheet" href="css/carta.css">
-  <!-- Descargar el modelo y three.js en paralelo desde el principio -->
-  <link rel="preload" href="assets/Checkmate.glb" as="fetch" type="model/gltf-binary" crossorigin>
-  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" crossorigin>
-  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" crossorigin>
   <script type="importmap">
     {
       "imports": {
@@ -20,6 +16,22 @@
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
       }
     }
+  </script>
+  <!-- Descargar el modelo y three.js en paralelo desde el principio.
+       IMPORTANTE: siempre DESPUÉS del importmap; si un modulepreload va antes, Safari,
+       Firefox y otros navegadores ignoran el importmap y la página no arranca. -->
+  <link rel="preload" href="assets/Checkmate.glb" as="fetch" type="model/gltf-binary" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js" crossorigin>
+  <script>
+    // Red de seguridad: si la carga se atasca (red lenta, navegador antiguo…),
+    // ofrecer reintentar en lugar de dejar la pantalla de carga para siempre.
+    setTimeout(function () {
+      if (document.body.dataset.state !== 'loading') return;
+      var t = document.querySelector('.loader-text');
+      if (t) t.textContent = 'La madriguera es profunda… toca para reintentar';
+      document.getElementById('loader').addEventListener('click', function () { location.reload(); });
+    }, 30000);
   </script>
 </head>
 <body data-state="loading">

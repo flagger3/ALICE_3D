@@ -92,6 +92,7 @@ function updateCamera(dt) {
 let animator = null, model = null;
 const aliceBox = new THREE.Box3(new THREE.Vector3(-0.38, 0, -0.32), new THREE.Vector3(0.38, 1.66, 0.32));
 
+const MODEL_BYTES = 5201916; // tamaño de assets/Checkmate.glb (actualizar si cambia el modelo)
 new GLTFLoader().load(
   'assets/Checkmate.glb',
   async (gltf) => {
@@ -119,7 +120,10 @@ new GLTFLoader().load(
     setState('intro');
   },
   (xhr) => {
-    if (xhr.total) $('#loaderPct').textContent = `${Math.round((xhr.loaded / xhr.total) * 100)} %`;
+    // GitHub Pages sirve el modelo comprimido y `total` es el tamaño comprimido (menor que
+    // lo descargado): usar el tamaño real del archivo y no pasar de 99 % hasta terminar.
+    const total = Math.max(xhr.total || 0, MODEL_BYTES);
+    $('#loaderPct').textContent = `${Math.min(99, Math.round((xhr.loaded / total) * 100))} %`;
   },
   (err) => {
     console.error(err);
